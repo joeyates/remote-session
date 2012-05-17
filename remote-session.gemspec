@@ -19,6 +19,11 @@ Run commands as the logged on user, or via sudo as any permitetd user (defaults 
   gem.add_runtime_dependency 'net-ssh'
 
   gem.add_development_dependency 'rspec',  '>= 2.3.0'
+  if RUBY_VERSION < '1.9'
+    gem.add_development_dependency 'rcov'
+  else
+    gem.add_development_dependency 'simplecov'
+  end
 
   gem.rubyforge_project = 'nowarning'
 end
