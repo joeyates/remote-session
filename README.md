@@ -1,6 +1,17 @@
-# Remote::Session
+remote-session [![Build Status](https://secure.travis-ci.org/joeyates/remote-session.png)][Continuous Integration]
+==============
 
-Run user, and sudo, commands over an SSH connection.
+*Run user, and sudo, commands over an SSH connection*
+
+  * [Source Code]
+  * [API documentation]
+  * [Rubygem]
+  * [Continuous Integration]
+
+[Source Code]: https://github.com/joeyates/remote-session "Source code at GitHub"
+[API documentation]: http://rubydoc.info/gems/remote-session/frames "RDoc API Documentation at Rubydoc.info"
+[Rubygem]: http://rubygems.org/gems/remote-session "Ruby gem at rubygems.org"
+[Continuous Integration]: http://travis-ci.org/joeyates/remote-session "Build status by Travis-CI"
 
 ## Installation
 
