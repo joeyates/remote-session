@@ -2,7 +2,7 @@ require 'rspec'
 
 if RUBY_VERSION < '1.9'
   require 'rspec/autorun'
-end
+else
   require 'simplecov'
   if defined?( GATHER_RSPEC_COVERAGE )
     SimpleCov.start do
