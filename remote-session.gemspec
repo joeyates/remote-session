@@ -4,8 +4,9 @@ require File.expand_path('../lib/remote/session/version', __FILE__)
 Gem::Specification.new do |gem|
   gem.authors       = ['Joe Yates']
   gem.email         = ['joe.g.yates@gmail.com']
-  gem.description   = %q{TODO: Write a gem description}
-  gem.summary       = %q{TODO: Write a gem summary}
+  gem.description   = %q{This gem uses Net::SSH to create a connection and allow command execution over it.
+Run commands as the logged on user, or via sudo as any permitetd user (defaults to root).}
+  gem.summary       = %q{Run user commands, and sudo, commands over an SSH connection}
   gem.homepage      = ''
 
   gem.files         = `git ls-files`.split($\)
