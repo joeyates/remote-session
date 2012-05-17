@@ -1,5 +1,6 @@
 # -*- encoding: utf-8 -*-
-require File.expand_path('../lib/remote/session/version', __FILE__)
+$:.unshift( File.join( File.dirname( __FILE__ ), 'lib' ) )
+require 'remote/session/version'
 
 Gem::Specification.new do |gem|
   gem.authors       = ['Joe Yates']
