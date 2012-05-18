@@ -216,6 +216,30 @@ describe Remote::Session do
               subject.sudo( 'pwd' )
             end
 
+            it 'should run multiple commands' do
+              @ch.stub!( :on_data ) do |&block|
+                block.call( @ch, 'the_prompt' )
+                block.call( @ch, 'the_prompt' )
+                block.call( @ch, 'the_prompt' )
+                block.call( @ch, 'the_prompt' )
+              end
+              $stdout.stub( :write )
+
+              output = []
+              subject.stub( :puts ) do | s |
+                output << s
+              end
+
+              subject.sudo( [ 'pwd', 'cd /etc', 'ls' ] )
+
+              output.should == [
+                                 "@host.example.com: sudo pwd",
+                                 "@host.example.com: sudo cd /etc",
+                                 "@host.example.com: sudo ls",
+                                 "@host.example.com: sudo exit"
+                               ]
+            end
+
             it 'should output returning data' do
               @ch.stub!( :on_data ) do |&block|
                 block.call( @ch, 'some_data' )
