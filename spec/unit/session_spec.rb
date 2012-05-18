@@ -9,12 +9,12 @@ describe Remote::Session do
 
     before :each do
       Net::SSH.stub!( :start )
-      @user         = ENV[ 'USER' ]
+      @username         = ENV[ 'USER' ]
       ENV[ 'USER' ] = 'the_user'
     end
 
     after :each do
-      ENV[ 'USER' ] = @user
+      ENV[ 'USER' ] = @username
     end
 
     it 'should require a hostname parameter' do
@@ -29,22 +29,22 @@ describe Remote::Session do
       Remote::Session.new( TEST_HOST )
     end
 
-    it 'user should default to the current user' do
+    it 'username should default to the current user' do
       Net::SSH.should_receive( :start ).with( TEST_HOST, 'the_user', {} )
 
       Remote::Session.new( TEST_HOST )
     end
 
-    it 'should accept user option' do
+    it 'should accept username option' do
       Net::SSH.should_receive( :start ).with( TEST_HOST, 'another_user', {} )
 
-      Remote::Session.new( TEST_HOST, :user => 'another_user' )
+      Remote::Session.new( TEST_HOST, :username => 'another_user' )
     end
 
     it 'should use any supplied password' do
       Net::SSH.should_receive( :start ).with( TEST_HOST, 'another_user', { :password => 'secret' } )
 
-      Remote::Session.new( TEST_HOST, :user => 'another_user', :password => 'secret' )
+      Remote::Session.new( TEST_HOST, :username => 'another_user', :password => 'secret' )
     end
 
   end
@@ -62,7 +62,7 @@ describe Remote::Session do
         @ssh.stub!( :close )
 
         called = false
-        Remote::Session.open( TEST_HOST, :user => 'another_user' ) do | rs |
+        Remote::Session.open( TEST_HOST, :username => 'another_user' ) do | rs |
           called = true
         end
 
@@ -74,19 +74,19 @@ describe Remote::Session do
 
         Net::SSH.should_receive( :start ).with( 'host.example.com', 'another_user', {} )
 
-        Remote::Session.open( TEST_HOST, :user => 'another_user' ) {}
+        Remote::Session.open( TEST_HOST, :username => 'another_user' ) {}
       end
 
       it 'should require a block' do
         expect do
-          Remote::Session.open( TEST_HOST, :user => 'another_user' )
+          Remote::Session.open( TEST_HOST, :username => 'another_user' )
         end.       to         raise_error( NoMethodError, "undefined method `call' for nil:NilClass" )
       end
 
       it 'should close the connection' do
         @ssh.should_receive( :close )
 
-        Remote::Session.open( TEST_HOST, :user => 'another_user' ) {}
+        Remote::Session.open( TEST_HOST, :username => 'another_user' ) {}
       end
 
     end
@@ -258,8 +258,9 @@ describe Remote::Session do
 
               it 'should send the supplied data' do
                 @ch.should_receive( :send_data ).with( "this data\n" )
+                @rs.prompts[ 'my prompt' ] = 'this data' 
 
-                @rs.sudo( 'pwd', 'my prompt' => 'this data' )
+                @rs.sudo( 'pwd' )
               end
 
               it 'should not echo the prompt' do
@@ -267,8 +268,9 @@ describe Remote::Session do
                 @rs.stub!( :puts ) do | s |
                   output << s
                 end
+                @rs.prompts[ 'my prompt' ] = 'this data' 
 
-                @rs.sudo( 'pwd', 'my prompt' => 'this data' )
+                @rs.sudo( 'pwd' )
 
                 output.should == ["@#{TEST_HOST}: sudo pwd"]
               end

@@ -17,7 +17,7 @@ remote-session [![Build Status](https://secure.travis-ci.org/joeyates/remote-ses
 
 Add this line to your application's Gemfile:
 
-    gem 'remote-session'
+    gem 'remote/session'
 
 And then execute:
 
@@ -30,7 +30,7 @@ Or install it yourself as:
 ## Usage
 
 ```ruby
-require 'remote-session'
+require 'remote/session'
 
 r = Remote::Session.new( 'host.example.com' )
 puts r.run( 'pwd' )

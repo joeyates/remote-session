@@ -17,6 +17,7 @@ Run commands as the logged on user, or via sudo as any permitetd user (defaults 
   gem.version       = Remote::Session::VERSION
 
   gem.add_runtime_dependency 'rake', '>= 0.8.7'
+  gem.add_runtime_dependency 'net-sftp'
   gem.add_runtime_dependency 'net-ssh'
 
   gem.add_development_dependency 'rspec',  '>= 2.3.0'
