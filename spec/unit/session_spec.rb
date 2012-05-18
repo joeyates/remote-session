@@ -136,15 +136,6 @@ describe Remote::Session do
         end.to raise_error( RuntimeError, 'Session is closed' )
       end
 
-      it 'should print the command to stdout' do
-        @ssh.stub!( :open_channel => nil )
-        @ssh.stub!( :loop         => nil )
-
-        subject.should_receive( :puts ).with( "@#{TEST_HOST}: sudo pwd" )
-
-        subject.sudo( 'pwd' )
-      end
-
       it 'should run the command' do
         subject.stub!( :puts )
 
@@ -155,7 +146,7 @@ describe Remote::Session do
             request_pty_block.call( @channel, true )
           end
 
-          @channel.should_receive( :exec ).with( "sudo -p 'sudo_prompt' pwd" )
+          @channel.should_receive( :exec ).with( "sudo -p 'sudo_prompt' su -" )
 
           open_channel_block.call @channel
         end
@@ -195,11 +186,11 @@ describe Remote::Session do
             end
           end
 
-          it 'should fail if the command fails' do
+          it 'should fail if the sudo command fails' do
             @ch.stub!( :exec ) do |&block|
               expect do
                 block.call( @ch, false )
-              end.to raise_error( RuntimeError, 'Could not execute sudo command: pwd' )
+              end.to raise_error( RuntimeError, 'Could not execute sudo su command' )
             end
 
             @rs.sudo( 'pwd' )
@@ -214,20 +205,33 @@ describe Remote::Session do
               @ch.stub!( :send_data )
             end
 
+            it 'should print the command to stdout' do
+              @ch.stub!( :on_data ) do |&block|
+                block.call( @ch, 'the_prompt' )
+              end
+              $stdout.stub( :write )
+
+              subject.should_receive( :puts ).with( "@#{TEST_HOST}: sudo pwd" )
+
+              subject.sudo( 'pwd' )
+            end
+
             it 'should output returning data' do
               @ch.stub!( :on_data ) do |&block|
                 block.call( @ch, 'some_data' )
               end
 
-              @rs.should_receive( :puts ).with( 'some_data' )
+              $stdout.should_receive( :write ).with( 'some_data' )
 
               @rs.sudo( 'pwd' )
             end
 
             context 'with password prompt' do
               before :each do
+                $stdout.stub( :write )
                 @ch.stub!( :on_data ) do |&block|
                   block.call( @ch, 'sudo_prompt' )
+                  block.call( @ch, 'root#' )
                 end
               end
 
@@ -251,8 +255,10 @@ describe Remote::Session do
 
             context 'with user-supplied prompt' do
               before :each do
+                $stdout.stub( :write )
                 @ch.stub!( :on_data ) do |&block|
                   block.call( @ch, 'Here is my prompt:' )
+                  block.call( @ch, 'root#' )
                 end
               end
 
@@ -268,11 +274,14 @@ describe Remote::Session do
                 @rs.stub!( :puts ) do | s |
                   output << s
                 end
+                $stdout.stub!( :write ) do | s |
+                  output << s
+                end
                 @rs.prompts[ 'my prompt' ] = 'this data' 
 
                 @rs.sudo( 'pwd' )
 
-                output.should == ["@#{TEST_HOST}: sudo pwd"]
+                output.should == [ 'root#', "@#{TEST_HOST}: sudo pwd"]
               end
 
             end
@@ -286,7 +295,7 @@ describe Remote::Session do
 
               expect do
                 @rs.sudo( 'pwd' )
-              end.to raise_error( RuntimeError, 'Error It failed while performing command: pwd' )
+              end.to raise_error( RuntimeError, 'Error It failed while performing commands: ["pwd", "exit"]' )
             end
 
           end

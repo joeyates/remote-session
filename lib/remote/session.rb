@@ -41,15 +41,15 @@ module Remote
       puts @session.exec!( command )
     end
 
-    def sudo( command )
+    def sudo( commands )
       raise "Session is closed" if @session.nil?
+      commands = [ *commands ] + [ 'exit' ]
 
-      puts "@#{ @host }: sudo #{ command }"
       @session.open_channel do |ch|
         ch.request_pty do |ch, success|
           raise "Could not obtain pty" if ! success
 
-          channel_exec ch, command
+          channel_exec ch, commands
         end
       end
       @session.loop
@@ -94,27 +94,34 @@ module Remote
       @session = Net::SSH.start( @host, @username, ssh_options )
     end
 
-    def channel_exec( ch, command )
-      ch.exec "sudo -p '#{ SUDO_PROMPT }' #{ command }" do |ch, success|
-        raise "Could not execute sudo command: #{ command }" if ! success
+    def channel_exec( ch, commands )
+      ch.exec "sudo -p '#{ SUDO_PROMPT }' su -" do |ch, success|
+        raise "Could not execute sudo su command" if ! success
 
         ch.on_data do | ch, data |
           if data =~ Regexp.new( SUDO_PROMPT )
             ch.send_data "#{ @sudo_password }\n"
           else
-            prompt_matched = false
+            sent_password = false
             @prompts.each_pair do | prompt, send |
               if data =~ Regexp.new( prompt )
                 ch.send_data "#{ send }\n"
-                prompt_matched = true
+                sent_password = true
               end
             end
-            puts data if ! prompt_matched
+            if ! sent_password
+              $stdout.write data
+              if commands.size > 0
+                c = commands.shift
+                puts "@#{ @host }: sudo #{ c }"
+                ch.send_data "#{c}\n"
+              end
+            end
           end
         end
 
         ch.on_extended_data do |ch, type, data|
-          raise "Error #{ data } while performing command: #{ command }"
+          raise "Error #{ data } while performing commands: #{ commands }"
         end
       end
     end
