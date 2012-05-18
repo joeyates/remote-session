@@ -60,6 +60,14 @@ module Remote
       @session = nil
     end
 
+    def put( remote_path, &block )
+      sftp = Net::SFTP::Session.new( @session ).connect!
+      sftp.file.open( remote_path, 'w' ) do |f|
+        f.write block.call
+      end
+      sftp.close_channel
+    end
+
     def sudo_put( remote_path, &block )
       temp_path = "/tmp/remote-session.#{ Time.now.to_f }"
       run "mkdir #{ temp_path }"
@@ -70,14 +78,6 @@ module Remote
 
       sudo "cp -f #{ temp_file } #{ remote_path }"
       run "rm -rf #{ temp_path }"
-    end
-    
-    def put( remote_path, &block )
-      sftp = Net::SFTP::Session.new( @session ).connect!
-      sftp.file.open( remote_path, 'w' ) do |f|
-        f.puts block.call
-      end
-      sftp.close_channel
     end
 
     private

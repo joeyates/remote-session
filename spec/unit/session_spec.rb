@@ -330,6 +330,63 @@ describe Remote::Session do
 
     end
 
+    context '#put' do
+
+      before :each do
+        @file2 = stub( 'file2' )
+        @file1 = stub( 'file1', :open => lambda { |&block| block.call @file2 } )
+        @sftp2 = stub( 'Net::SFTP::Session instance', :file => @file1,
+                                                      :close_channel => nil )
+        @sftp1 = stub( 'Net::SFTP::Session instance', :connect! => @sftp2 )
+        Net::SFTP::Session.stub!( :new => @sftp1 )
+      end
+
+      subject { Remote::Session.new( TEST_HOST ) }
+
+      it 'creates an SFTP session' do
+        Net::SFTP::Session.should_receive( :new ).and_return( @sftp1 )
+        @sftp1.should_receive( :connect! ).once.and_return( @sftp2 )
+
+        subject.put( '/path' ) {}
+      end
+
+      it 'opens the file' do
+        @file1.should_receive( :open ) do | *args, &block |
+          args.should == ["/path", "w"]
+        end
+
+        subject.put( '/path' ) { 'content' }
+      end
+
+      it 'writes the data to the file' do
+        @file1.stub!( :open ) do | *args, &block |
+          block.call @file2
+        end
+
+        @file2.should_receive( :write ).with( 'content' )
+
+        subject.put( '/path' ) { 'content' }
+      end
+
+      context '#sudo_put' do
+        it 'should write to /tmp, then copy' do
+          subject.stub!( :puts => nil )
+          @ch = stub('channel' )
+          @ch.stub!( :request_pty ) { |&block| block.call @ch, true }
+          @ssh.stub!( :open_channel ) { |&block| block.call @ch }
+          @ssh.stub!( :loop => nil )
+
+          @ssh.should_receive( :exec! ).with( %r{^mkdir /tmp/remote-session.[\d\.]+$} )
+          @ssh.should_receive( :exec! ).with( %r{^chmod 0700 /tmp/remote-session.[\d\.]+$} )
+          @ch.should_receive( :exec ).with( %r{^sudo.*? su -$} )
+          @ssh.should_receive( :exec! ).with( %r{rm -rf /tmp/remote-session.[\d\.]+$} )
+
+          subject.sudo_put( '/path' ) { 'content' }
+        end
+      end
+
+    end
+
   end
 
 end
