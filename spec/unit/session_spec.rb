@@ -136,7 +136,7 @@ describe Remote::Session do
         end.to raise_error( RuntimeError, 'Session is closed' )
       end
 
-      it 'should run the command' do
+      it 'should run the su command' do
         subject.stub!( :puts )
 
         @ssh.should_receive( :open_channel ) do |&open_channel_block|
