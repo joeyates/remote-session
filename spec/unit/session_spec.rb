@@ -1,7 +1,31 @@
 # encoding: utf-8
 load File.expand_path( '../spec_helper.rb', File.dirname(__FILE__) )
 
+module SpecOutputCapture
+
+  def expect_output
+    stdout = []
+    @rs.stub!( :puts ) do | s |
+      stdout << "{ s }\n"
+    end
+    $stdout.stub!( :write ) do | s |
+      stdout << s
+    end
+    stderr = []
+    $stderr.stub!( :write ) do | s |
+      stderr << s
+    end
+
+    yield
+
+    [ stdout, stderr ]
+  end
+
+end
+
 describe Remote::Session do
+
+  include SpecOutputCapture
 
   TEST_HOST = 'host.example.com'
 
@@ -204,15 +228,15 @@ describe Remote::Session do
               end
               @ch.stub!( :on_extended_data => nil )
               @ch.stub!( :send_data )
+              $stdout.stub!( :write => nil )
             end
 
             it 'should print the command to stdout' do
               @ch.stub!( :on_data ) do |&block|
                 block.call( @ch, 'the_prompt' )
               end
-              $stdout.stub( :write )
 
-              subject.should_receive( :puts ).with( "@#{TEST_HOST}: sudo pwd" )
+              @ch.should_receive( :send_data ).with( "pwd\n" )
 
               subject.sudo( 'pwd' )
             end
@@ -224,21 +248,13 @@ describe Remote::Session do
                 block.call( @ch, 'the_prompt' )
                 block.call( @ch, 'the_prompt' )
               end
-              $stdout.stub( :write )
 
-              output = []
-              subject.stub( :puts ) do | s |
-                output << s
-              end
+              sent = []
+              @ch.stub!( :send_data ) { | s | sent << s }
 
               subject.sudo( [ 'pwd', 'cd /etc', 'ls' ] )
 
-              output.should == [
-                                 "@host.example.com: sudo pwd",
-                                 "@host.example.com: sudo cd /etc",
-                                 "@host.example.com: sudo ls",
-                                 "@host.example.com: sudo exit"
-                               ]
+              sent.should == [ "pwd\n", "cd /etc\n", "ls\n", "exit\n" ]
             end
 
             it 'should output returning data' do
@@ -246,9 +262,9 @@ describe Remote::Session do
                 block.call( @ch, 'some_data' )
               end
 
-              $stdout.should_receive( :write ).with( 'some_data' )
-
-              @rs.sudo( 'pwd' )
+              expect_output do
+                @rs.sudo( 'pwd' )
+              end.should == [ [ 'some_data' ], [] ]
             end
 
             context 'with password prompt' do
@@ -267,14 +283,9 @@ describe Remote::Session do
               end
 
               it 'should not echo the standard prompt' do
-                output = []
-                @rs.stub!( :puts ) do | s |
-                  output << s
-                end
-
-                @rs.sudo( 'pwd' )
-
-                output.should == ["@#{TEST_HOST}: sudo pwd"]
+                expect_output do
+                  @rs.sudo( 'pwd' )
+                end.should == [ [ 'root#' ], [] ]
               end
             end
 
@@ -295,18 +306,11 @@ describe Remote::Session do
               end
 
               it 'should not echo the prompt' do
-                output = []
-                @rs.stub!( :puts ) do | s |
-                  output << s
-                end
-                $stdout.stub!( :write ) do | s |
-                  output << s
-                end
                 @rs.prompts[ 'my prompt' ] = 'this data' 
 
-                @rs.sudo( 'pwd' )
-
-                output.should == [ 'root#', "@#{TEST_HOST}: sudo pwd"]
+                expect_output do
+                  @rs.sudo( 'pwd' )
+                end.should == [ [ 'root#' ], [] ]
               end
 
             end
@@ -318,9 +322,9 @@ describe Remote::Session do
                 block.call @ch, 'foo', 'It failed' 
               end
 
-              $stderr.should_receive( :puts ).with( "It failed" )
-
-              @rs.sudo( 'pwd' )
+              expect_output do
+                @rs.sudo( 'pwd' )
+              end.should == [ [], [ "It failed", "\n" ] ]
             end
 
           end

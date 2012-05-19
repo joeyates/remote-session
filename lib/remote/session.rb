@@ -43,7 +43,7 @@ module Remote
 
     def sudo( commands )
       raise "Session is closed" if @session.nil?
-      commands = [ *commands ] + [ 'exit' ]
+      commands = [ *commands ]
 
       @session.open_channel do |ch|
         ch.request_pty do |ch, success|
@@ -110,11 +110,12 @@ module Remote
               end
             end
             if ! sent_password
-              $stdout.write data
+              $stdout.write( data )
               if commands.size > 0
                 c = commands.shift
-                puts "@#{ @host }: sudo #{ c }"
                 ch.send_data "#{c}\n"
+              else
+                ch.send_data "exit\n"
               end
             end
           end
