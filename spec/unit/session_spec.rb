@@ -197,6 +197,7 @@ describe Remote::Session do
           end
 
           context 'in exec' do
+
             before :each do
               @ch.stub!( :exec ) do |&block|
                 block.call( @ch, true )
@@ -310,16 +311,16 @@ describe Remote::Session do
 
             end
 
-            it 'should fail if error data is received' do
+            it 'should send error data to stdout' do
               @ch.stub!( :on_data )
 
               @ch.stub!( :on_extended_data ) do |&block|
                 block.call @ch, 'foo', 'It failed' 
               end
 
-              expect do
-                @rs.sudo( 'pwd' )
-              end.to raise_error( RuntimeError, 'Error It failed while performing commands: ["pwd", "exit"]' )
+              $stderr.should_receive( :puts ).with( "It failed" )
+
+              @rs.sudo( 'pwd' )
             end
 
           end

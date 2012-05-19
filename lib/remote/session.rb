@@ -121,7 +121,7 @@ module Remote
         end
 
         ch.on_extended_data do |ch, type, data|
-          raise "Error #{ data } while performing commands: #{ commands }"
+          $stderr.puts data
         end
       end
     end
