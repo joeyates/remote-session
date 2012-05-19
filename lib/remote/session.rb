@@ -1,3 +1,4 @@
+require 'remote/session/send_file'
 require 'remote/session/version'
 require 'net/sftp'
 require 'net/ssh'
