@@ -5,7 +5,7 @@ describe Remote::Session::SendFile do
 
   context '#initialize' do
 
-    it 'should require two parameters'do
+    it 'should require two parameters' do
       expect do
         Remote::Session::SendFile.new( 'foo' )
       end.to raise_error( ArgumentError, 'wrong number of arguments (1 for 2)' )
@@ -18,15 +18,11 @@ describe Remote::Session::SendFile do
 
     specify( 'local_path' )  { subject.local_path.should  == 'foo' }
     specify( 'remote_path' ) { subject.remote_path.should == 'bar' }
-    specify( 'chunk_size' )  { subject.chunk_size.should  == 1024 }
+    specify( 'chunk_size' )  { subject.chunk_size.should  == 1024  }
   end
 
   context 'instance_methods' do
     subject { Remote::Session::SendFile.new( '/local/path', '/remote/path' ) }
-
-    context '#open?' do
-      specify { subject.open?.should be_false }
-    end
 
     context '#eof?' do
       specify { subject.eof?.should be_true }
@@ -39,6 +35,18 @@ describe Remote::Session::SendFile do
         subject.open
 
         subject.eof?.should be_false
+      end
+    end
+
+    context '#open' do
+      it 'should rewind the file, if already open' do
+        @file = stub( 'file', :eof? => false )
+        File.should_receive( :open ).with( '/local/path', 'r' ).and_return( @file )
+        @file.should_receive( :rewind )
+
+        subject.open
+
+        subject.open
       end
     end
 

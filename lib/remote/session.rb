@@ -1,4 +1,6 @@
+require 'remote/session/send'
 require 'remote/session/send_file'
+require 'remote/session/send_string'
 require 'remote/session/version'
 require 'net/sftp'
 require 'net/ssh'
@@ -45,7 +47,7 @@ module Remote
 
     def sudo( commands )
       raise "Session is closed" if @session.nil?
-      commands = [ *commands ]
+      commands = [ *commands ] + [ 'exit' ]
 
       @session.open_channel do |ch|
         ch.request_pty do |ch, success|
@@ -113,13 +115,10 @@ module Remote
 
       $stdout.write( data )
 
-      if ch[ :commands ].size == 0
-        ch.send_data "exit\n"
-        return
-      end
+      return if ch[ :commands ].size == 0
 
       command = ch[ :commands ].shift
-      if command.is_a?( Remote::Session::SendFile )
+      if command.is_a?( Remote::Session::Send )
         send_file_chunk( ch, command )
       else
         ch.send_data "#{command}\n"

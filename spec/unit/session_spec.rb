@@ -288,7 +288,7 @@ describe Remote::Session do
                   block.call( @ch, 'root_prompt#' )
                 end
 
-                @sf.should_receive( :is_a? ).with( Remote::Session::SendFile ).twice.and_return( true )
+                @sf.should_receive( :is_a? ).with( Remote::Session::Send ).twice.and_return( true )
                 @sf.should_receive( :remote_path ).twice.and_return( '/remote/path' )
 
                 chunk = 0
@@ -338,7 +338,7 @@ describe Remote::Session do
                   block.call( @ch, 'root_prompt#' )
                 end
 
-                @sf.stub!( :is_a? ).with( Remote::Session::SendFile ).and_return( true )
+                @sf.stub!( :is_a? ).with( Remote::Session::Send ).and_return( true )
                 @sf.stub!( :open? => false )
                 @sf.stub!( :remote_path ).and_return( '/remote/path' )
                 @sf.stub!( :eof? => true )
