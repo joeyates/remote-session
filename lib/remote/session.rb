@@ -71,18 +71,6 @@ module Remote
       sftp.close_channel
     end
 
-    def sudo_put( remote_path, &block )
-      temp_path = "/tmp/remote-session.#{ Time.now.to_f }"
-      run "mkdir #{ temp_path }"
-      run "chmod 0700 #{ temp_path }"
-
-      temp_file = File.join( temp_path, File.basename( remote_path ) )
-      put temp_file, &block
-
-      sudo "cp -f #{ temp_file } #{ remote_path }"
-      run "rm -rf #{ temp_path }"
-    end
-
     private
 
     def ssh_options

@@ -400,23 +400,6 @@ describe Remote::Session do
         subject.put( '/path' ) { 'content' }
       end
 
-      context '#sudo_put' do
-        it 'should write to /tmp, then copy' do
-          subject.stub!( :puts => nil )
-          @ch = stub('channel' )
-          @ch.stub!( :request_pty ) { |&block| block.call @ch, true }
-          @ssh.stub!( :open_channel ) { |&block| block.call @ch }
-          @ssh.stub!( :loop => nil )
-
-          @ssh.should_receive( :exec! ).with( %r{^mkdir /tmp/remote-session.[\d\.]+$} )
-          @ssh.should_receive( :exec! ).with( %r{^chmod 0700 /tmp/remote-session.[\d\.]+$} )
-          @ch.should_receive( :exec ).with( %r{^sudo.*? su -$} )
-          @ssh.should_receive( :exec! ).with( %r{rm -rf /tmp/remote-session.[\d\.]+$} )
-
-          subject.sudo_put( '/path' ) { 'content' }
-        end
-      end
-
     end
 
   end
