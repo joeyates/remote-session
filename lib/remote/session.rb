@@ -51,7 +51,6 @@ module Remote
         ch.request_pty do |ch, success|
           raise "Could not obtain pty" if ! success
 
-          add_callbacks ch
           channel_exec ch, commands
         end
       end
@@ -85,69 +84,69 @@ module Remote
       @session = Net::SSH.start( @host, @username, ssh_options )
     end
 
-    def add_callbacks( ch )
-      ch[ :on_data ] = lambda do | data |
-        if data =~ Regexp.new( SUDO_PROMPT )
-          $stderr.puts 'sending password'
-          ch.send_data "#{ @sudo_password }\n"
-          break
-        end
-
-        @prompts.each_pair do | prompt, send |
-          if data =~ Regexp.new( prompt )
-            ch.send_data "#{ send }\n"
-            break
-          end
-        end
-
-        $stdout.write( data )
-
-        if ch[ :commands ].size == 0
-          ch.send_data "exit\n"
-          break
-        end
-
-        command = ch[ :commands ].shift
-        if command.is_a?( Remote::Session::SendFile )
-          ch[ :commands ].unshift command
-
-          if command.open?
-            operator = '>>'
-          else
-            command.open
-            operator = '>'
-          end
-
-          chunk =
-            if ! command.eof?
-              command.read
-            else
-              # Handle empty files
-              ''
-            end
-          ch.send_data "echo -n '#{ Base64.encode64( chunk ) }' | base64 -d #{ operator } #{ command.remote_path }\n"
-
-          if command.eof?
-            command.close
-            ch[ :commands ].shift
-          end
-        else
-          ch.send_data "#{command}\n"
-        end
-      end
-    end
-
     def channel_exec( ch, commands )
       ch[ :commands ] = commands
 
       ch.exec "sudo -k -p '#{ SUDO_PROMPT }' su -" do |ch, success|
         raise "Could not execute sudo su command" if ! success
 
-        ch.on_data { | ch, data | ch[ :on_data ].call( data ) }
+        ch.on_data( &method( :on_data ) )
 
         ch.on_extended_data do |ch, type, data|
           $stderr.puts data
         end
+      end
+    end
+
+    def on_data( ch, data )
+      if data =~ Regexp.new( SUDO_PROMPT )
+        ch.send_data "#{ @sudo_password }\n"
+        return
+      end
+
+      @prompts.each_pair do | prompt, send |
+        if data =~ Regexp.new( prompt )
+          ch.send_data "#{ send }\n"
+          return
+        end
+      end
+
+      $stdout.write( data )
+
+      if ch[ :commands ].size == 0
+        ch.send_data "exit\n"
+        return
+      end
+
+      command = ch[ :commands ].shift
+      if command.is_a?( Remote::Session::SendFile )
+        send_file_chunk( ch, command )
+      else
+        ch.send_data "#{command}\n"
+      end
+    end
+
+    def send_file_chunk( ch, send_file )
+      if send_file.open?
+        operator = '>>'
+      else
+        send_file.open
+        operator = '>'
+      end
+
+      chunk =
+        if ! send_file.eof?
+          Base64.encode64( send_file.read )
+        else
+          # Handle empty files
+          ''
+        end
+      ch.send_data "echo -n '#{ chunk }' | base64 -d #{ operator } #{ send_file.remote_path }\n"
+
+      if send_file.eof?
+        send_file.close
+      else
+        ch[ :commands ].unshift send_file
       end
     end
 

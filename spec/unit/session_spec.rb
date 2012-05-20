@@ -149,6 +149,17 @@ describe Remote::Session do
 
     context '#sudo' do
 
+      before :each do
+        @ch = stub( 'channel' )
+        @commands = {}
+        @ch.stub!( :[]= ) do | k, v |
+          @commands[ k ] = v
+        end
+        @ch.stub!( :[] ) do | k |
+          @commands[ k ]
+        end
+      end
+
       subject { Remote::Session.new( TEST_HOST ) }
 
       it 'should fail, if the session is closed' do
@@ -164,15 +175,13 @@ describe Remote::Session do
         subject.stub!( :puts )
 
         @ssh.should_receive( :open_channel ) do |&open_channel_block|
-          @channel = stub( 'channel' )
-
-          @channel.should_receive( :request_pty ) do |&request_pty_block|
-            request_pty_block.call( @channel, true )
+          @ch.should_receive( :request_pty ) do |&request_pty_block|
+            request_pty_block.call( @ch, true )
           end
 
-          @channel.should_receive( :exec ).with( "sudo -p 'sudo_prompt' su -" )
+          @ch.should_receive( :exec ).with( "sudo -k -p 'sudo_prompt' su -" )
 
-          open_channel_block.call @channel
+          open_channel_block.call @ch
         end
         @ssh.should_receive( :loop )
 
@@ -186,7 +195,6 @@ describe Remote::Session do
           @rs.stub!( :puts )
 
           @ssh.stub!( :loop => nil )
-          @ch = stub( 'channel' )
           @ssh.stub!( :open_channel ) do |&block|
             block.call @ch
           end
@@ -267,31 +275,86 @@ describe Remote::Session do
               end.should == [ [ 'some_data' ], [] ]
             end
 
-            it 'should copy files' do
-              @ch.stub!( :on_data ) do |&block|
-                block.call( @ch, 'the_prompt' )
+            context 'sending files' do
+
+              before :each do
+                @sf = stub( 'Remote::Session::SendFile instance', :open => nil, :close => nil )
               end
-              @sf = stub( 'Remote::Session::SendFile instance', :open => nil, :close => nil )
-              eof = false
-              @sf.stub!( :eof? ) do
-                if eof
-                  true
-                else
-                  eof = true
-                  false
+
+              it 'should copy files' do
+                @ch.stub!( :on_data ) do |&block|
+                  block.call( @ch, 'root_prompt#' )
+                  block.call( @ch, 'root_prompt#' )
+                  block.call( @ch, 'root_prompt#' )
                 end
+
+                @sf.should_receive( :is_a? ).with( Remote::Session::SendFile ).twice.and_return( true )
+                @sf.should_receive( :remote_path ).twice.and_return( '/remote/path' )
+
+                chunk = 0
+                open = false
+                @sf.should_receive( :open ) do
+                  chunk = 1
+                  open = true
+                end
+
+                @sf.stub!( :open? ) do
+                  open
+                end
+
+                @sf.stub!( :eof? ) do
+                  case chunk
+                  when 0
+                    true
+                  when 1, 2
+                    false
+                  else
+                    true
+                  end
+                end
+
+                data = [ nil, 'first_chunk', 'second_chunk' ]
+                @sf.should_receive( :read ).twice do
+                  d = data[ chunk ]
+                  chunk += 1
+                  d
+                end
+
+                sent = []
+                @ch.stub!( :send_data ) { | d | sent << d }
+
+                @rs.sudo( @sf )
+
+                sent.should == [
+                  "echo -n 'Zmlyc3RfY2h1bms=\n' | base64 -d > /remote/path\n",
+                  "echo -n 'c2Vjb25kX2NodW5r\n' | base64 -d >> /remote/path\n",
+                  "exit\n"
+                ]
               end
 
-              @sf.should_receive( :is_a? ).with( Remote::Session::SendFile ).and_return( true )
-              @sf.should_receive( :remote_path ).and_return( '/remote/path' )
-              @sf.should_receive( :read ).and_return( 'data_chunk' )
+              it 'should copy empty files' do
+                @ch.stub!( :on_data ) do |&block|
+                  block.call( @ch, 'root_prompt#' )
+                  block.call( @ch, 'root_prompt#' )
+                end
 
-              sent = []
-              @ch.stub!( :send_data ) { | d | sent << d }
+                @sf.stub!( :is_a? ).with( Remote::Session::SendFile ).and_return( true )
+                @sf.stub!( :open? => false )
+                @sf.stub!( :remote_path ).and_return( '/remote/path' )
+                @sf.stub!( :eof? => true )
 
-              @rs.sudo( @sf )
+                sent = []
+                @ch.stub!( :send_data ) { | d | sent << d }
 
-              sent.should == [ "cat > /remote/path\n", "data_chunk", 3.chr ]
+
+                @rs.sudo( @sf )
+
+                sent.should == [
+                  "echo -n '' | base64 -d > /remote/path\n",
+                  "exit\n"
+                ]
+              end
+              
             end
 
             context 'with password prompt' do
