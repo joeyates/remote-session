@@ -1,6 +1,9 @@
 module Remote
   class Session
-    VERSION = "0.0.3"
+    MAJOR    = 0
+    MINOR    = 0
+    REVISION = 4
+    VERSION  = [ MAJOR, MINOR, REVISION ].map( &:to_s ).join( '.' )
   end
 end
 
