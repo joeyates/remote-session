@@ -30,6 +30,16 @@ describe Remote::Session::SendFile do
 
     context '#eof?' do
       specify { subject.eof?.should be_true }
+
+      it 'should delegate to the file' do
+        @file = stub( 'file' )
+        File.stub!( :open ).with( '/local/path', 'r' ).and_return( @file )
+        @file.should_receive( :eof? ).and_return( false )
+
+        subject.open
+
+        subject.eof?.should be_false
+      end
     end
 
     context '#close' do
