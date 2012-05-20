@@ -267,6 +267,33 @@ describe Remote::Session do
               end.should == [ [ 'some_data' ], [] ]
             end
 
+            it 'should copy files' do
+              @ch.stub!( :on_data ) do |&block|
+                block.call( @ch, 'the_prompt' )
+              end
+              @sf = stub( 'Remote::Session::SendFile instance', :open => nil, :close => nil )
+              eof = false
+              @sf.stub!( :eof? ) do
+                if eof
+                  true
+                else
+                  eof = true
+                  false
+                end
+              end
+
+              @sf.should_receive( :is_a? ).with( Remote::Session::SendFile ).and_return( true )
+              @sf.should_receive( :remote_path ).and_return( '/remote/path' )
+              @sf.should_receive( :read ).and_return( 'data_chunk' )
+
+              sent = []
+              @ch.stub!( :send_data ) { | d | sent << d }
+
+              @rs.sudo( @sf )
+
+              sent.should == [ "cat > /remote/path\n", "data_chunk", 3.chr ]
+            end
+
             context 'with password prompt' do
               before :each do
                 $stdout.stub( :write )
