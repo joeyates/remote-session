@@ -8,7 +8,9 @@ require 'base64'
 
 module Remote
   class Session
-    SUDO_PROMPT = 'sudo_prompt'
+    SUDO_PASSWORD_PROMPT = 'remote-session-sudo-prompt'
+    ROOT_COMMAND_PROMPT  = 'remote-session-prompt#'
+    ROOT_COMMAND_PROMPT_MATCH = /#{ ROOT_COMMAND_PROMPT }$/
 
     def self.open( host, options = {}, &block )
       rs = new( host, options )
@@ -47,7 +49,7 @@ module Remote
 
     def sudo( commands )
       raise "Session is closed" if @session.nil?
-      commands = [ *commands ] + [ 'exit' ]
+      commands = [ *commands ]
 
       @session.open_channel do |ch|
         ch.request_pty do |ch, success|
@@ -89,10 +91,10 @@ module Remote
     def channel_exec( ch, commands )
       ch[ :commands ] = commands
 
-      ch.exec "sudo -k -p '#{ SUDO_PROMPT }' su -" do |ch, success|
+      ch.exec "sudo -k -p '#{ SUDO_PASSWORD_PROMPT }' su -" do |ch, success|
         raise "Could not execute sudo su command" if ! success
 
-        ch.on_data( &method( :on_data ) )
+        ch.on_data &method( :handle_sudo_password_prompt )
 
         ch.on_extended_data do |ch, type, data|
           $stderr.puts data
@@ -100,11 +102,37 @@ module Remote
       end
     end
 
-    def on_data( ch, data )
-      if data =~ Regexp.new( SUDO_PROMPT )
+    def handle_sudo_password_prompt( ch, data )
+      $stdout.write( data )
+
+      if data =~ Regexp.new( SUDO_PASSWORD_PROMPT )
+        ch.on_data &method( :set_command_prompt )
         ch.send_data "#{ @sudo_password }\n"
-        return
+        puts "Sent sudo password"
       end
+    end
+
+    # Set the root command prompt to something we can
+    # recognise, and wait until that prompt comes back
+    def set_command_prompt( ch, data )
+      $stdout.write( data )
+
+      if data =~ ROOT_COMMAND_PROMPT_MATCH
+        # Got it, now we can switch so sending commands
+        ch[ :awaiting_prompt ] = false
+        ch.on_data &method( :on_data )
+        do_command ch, data
+      elsif ! ch[ :awaiting_prompt ]
+        # this is the first time through...
+        ch[ :awaiting_prompt ] = true
+        ch.send_data "export PS1='#{ ROOT_COMMAND_PROMPT }'\n"
+      else
+        # Waiting for new root prompt
+      end
+    end
+
+    def on_data( ch, data )
+      $stdout.write( data )
 
       @prompts.each_pair do | prompt, send |
         if data =~ Regexp.new( prompt )
@@ -113,15 +141,21 @@ module Remote
         end
       end
 
-      $stdout.write( data )
+      if data =~ ROOT_COMMAND_PROMPT_MATCH
+        do_command ch, data
+      end
+    end
 
-      return if ch[ :commands ].size == 0
-
-      command = ch[ :commands ].shift
-      if command.is_a?( Remote::Session::Send )
-        send_file_chunk( ch, command )
+    def do_command( ch, data )
+      if ch[ :commands ].size > 0
+        command = ch[ :commands ].shift
+        if command.is_a?( Remote::Session::Send )
+          send_file_chunk( ch, command )
+        else
+          ch.send_data "#{command}\n"
+        end
       else
-        ch.send_data "#{command}\n"
+        ch.send_data "exit\n"
       end
     end
 
