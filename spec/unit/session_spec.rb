@@ -274,7 +274,7 @@ describe Remote::Session do
             context 'after sudo prompt' do
 
               it 'should set the root command prompt' do
-                @ch.should_receive( :send_data ).with( "export PS1='remote-session-prompt#'" )
+                @ch.should_receive( :send_data ).with( "export PS1='remote-session-prompt#'\n" )
 
                 @rs.sudo( 'pwd' )
               end

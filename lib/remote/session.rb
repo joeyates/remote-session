@@ -124,7 +124,7 @@ module Remote
       elsif ! ch[ :awaiting_prompt ]
         # this is the first time through...
         ch[ :awaiting_prompt ] = true
-        ch.send_data "export PS1='#{ ROOT_COMMAND_PROMPT }'"
+        ch.send_data "export PS1='#{ ROOT_COMMAND_PROMPT }'\n"
       # else: Waiting for new root prompt
       end
     end
