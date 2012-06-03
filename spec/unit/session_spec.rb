@@ -6,17 +6,26 @@ module SpecOutputCapture
   def expect_output
     stdout = []
     @rs.stub!( :puts ) do | s |
-      stdout << "{ s }\n"
+      stdout << s + "\n"
+    end
+    $stdout.stub!( :puts ) do | s |
+      stdout << s + "\n"
     end
     $stdout.stub!( :write ) do | s |
       stdout << s
     end
     stderr = []
+    $stderr.stub!( :puts ) do | s |
+      stderr << s + "\n"
+    end
     $stderr.stub!( :write ) do | s |
       stderr << s
     end
 
     yield
+
+    $stdout.rspec_reset
+    $stderr.rspec_reset
 
     [ stdout, stderr ]
   end
@@ -179,7 +188,7 @@ describe Remote::Session do
             request_pty_block.call( @ch, true )
           end
 
-          @ch.should_receive( :exec ).with( "sudo -k -p 'sudo_prompt' su -" )
+          @ch.should_receive( :exec ).with( "sudo -k -p 'remote-session-sudo-prompt' su -" )
 
           open_channel_block.call @ch
         end
@@ -234,187 +243,180 @@ describe Remote::Session do
               @ch.stub!( :exec ) do |&block|
                 block.call( @ch, true )
               end
+              @ch.stub!( :send_data => nil )
               @ch.stub!( :on_extended_data => nil )
-              @ch.stub!( :send_data )
-              $stdout.stub!( :write => nil )
+              $stdout.stub( :write => nil )
+
+              # For each call to Channel.on_data, @@data contains the strings
+              # to send back to the block
+              @@data = [ [ 'remote-session-sudo-prompt' ],               # channel_exec call
+                         [ 'any prompt#', 'remote-session-prompt#' ],    # handle_sudo_password_prompt call
+                         [ 'remote-session-prompt#', 'remote-session-prompt#', 'remote-session-prompt#' ] ]
+              @ch.stub!( :on_data ) do |&block|
+                @@data.shift.each { |response| block.call @ch, response }
+              end
             end
 
-            it 'should print the command to stdout' do
-              @ch.stub!( :on_data ) do |&block|
-                block.call( @ch, 'the_prompt' )
-              end
+            it 'should supply the sudo password, when prompted' do
+              @ch.should_receive( :send_data ).with( "secret\n" )
 
-              @ch.should_receive( :send_data ).with( "pwd\n" )
-
-              subject.sudo( 'pwd' )
+              @rs.sudo( 'pwd' )
             end
 
-            it 'should run multiple commands' do
-              @ch.stub!( :on_data ) do |&block|
-                block.call( @ch, 'the_prompt' )
-                block.call( @ch, 'the_prompt' )
-                block.call( @ch, 'the_prompt' )
-                block.call( @ch, 'the_prompt' )
-              end
-
-              sent = []
-              @ch.stub!( :send_data ) { | s | sent << s }
-
-              subject.sudo( [ 'pwd', 'cd /etc', 'ls' ] )
-
-              sent.should == [ "pwd\n", "cd /etc\n", "ls\n", "exit\n" ]
-            end
-
-            it 'should output returning data' do
-              @ch.stub!( :on_data ) do |&block|
-                block.call( @ch, 'some_data' )
-              end
-
-              expect_output do
+            it 'should echo the sudo prompt' do
+              output = expect_output do
                 @rs.sudo( 'pwd' )
-              end.should == [ [ 'some_data' ], [] ]
+              end
+ 
+              output[ 0 ][ 0 ].should == 'remote-session-sudo-prompt'
             end
 
-            context 'sending files' do
+            context 'after sudo prompt' do
 
-              before :each do
-                @sf = stub( 'Remote::Session::SendFile instance', :open => nil, :close => nil )
+              it 'should set the root command prompt' do
+                @ch.should_receive( :send_data ).with( "export PS1='remote-session-prompt#'" )
+
+                @rs.sudo( 'pwd' )
               end
 
-              it 'should copy files' do
-                @ch.stub!( :on_data ) do |&block|
-                  block.call( @ch, 'root_prompt#' )
-                  block.call( @ch, 'root_prompt#' )
-                  block.call( @ch, 'root_prompt#' )
+              it 'should echo until the prompt is set' do
+                @@data[ 1 ] = [ 'prompt#', 'stuff1', 'stuff2', 'remote-session-prompt#' ]
+
+                output = expect_output do
+                  @rs.sudo( 'pwd' )
                 end
 
-                @sf.should_receive( :is_a? ).with( Remote::Session::Send ).twice.and_return( true )
-                @sf.should_receive( :remote_path ).twice.and_return( '/remote/path' )
+                output[ 0 ].should include 'stuff1'
+                output[ 0 ].should include 'stuff2'
+              end
 
-                chunk = 0
-                open = false
-                @sf.should_receive( :open ) do
-                  chunk = 1
-                  open = true
+              context 'with special command prompt' do
+
+                it 'should send the command' do
+                  @ch.should_receive( :send_data ).with( "pwd\n" )
+
+                  subject.sudo( 'pwd' )
                 end
 
-                @sf.stub!( :open? ) do
-                  open
+                it 'should run multiple commands' do
+                  sent = []
+                  @ch.stub!( :send_data ) { | s | sent << s }
+
+                  subject.sudo( [ 'pwd', 'cd /etc', 'ls' ] )
+
+                  sent[-4..-1].should == [ "pwd\n", "cd /etc\n", "ls\n", "exit\n" ]
                 end
 
-                @sf.stub!( :eof? ) do
-                  case chunk
-                  when 0
-                    true
-                  when 1, 2
-                    false
-                  else
-                    true
+                it 'should output returning data' do
+                  @@data[ 2 ] = [ 'remote-session-prompt#', 'some_data', 'remote-session-prompt#' ]
+                  output = expect_output do
+                    @rs.sudo( 'pwd' )
                   end
+
+                  output[ 0 ].should include 'some_data'
                 end
 
-                data = [ nil, 'first_chunk', 'second_chunk' ]
-                @sf.should_receive( :read ).twice do
-                  d = data[ chunk ]
-                  chunk += 1
-                  d
+                context 'sending files' do
+
+                  before :each do
+                    @sf = stub( 'Remote::Session::SendFile instance', :open => nil, :close => nil )
+                  end
+
+                  it 'should copy files' do
+                    @sf.should_receive( :is_a? ).with( Remote::Session::Send ).twice.and_return( true )
+                    @sf.should_receive( :remote_path ).twice.and_return( '/remote/path' )
+
+                    chunk = 0
+                    open = false
+                    @sf.should_receive( :open ) do
+                      chunk = 1
+                      open = true
+                    end
+
+                    @sf.stub!( :open? ) do
+                      open
+                    end
+
+                    @sf.stub!( :eof? ) do
+                      case chunk
+                      when 0
+                        true
+                      when 1, 2
+                        false
+                      else
+                        true
+                      end
+                    end
+
+                    data = [ nil, 'first_chunk', 'second_chunk' ]
+                    @sf.should_receive( :read ).twice do
+                      d = data[ chunk ]
+                      chunk += 1
+                      d
+                    end
+
+                    sent = []
+                    @ch.stub!( :send_data ) { | d | sent << d }
+
+                    @rs.sudo( @sf )
+
+                    sent.should include "echo -n 'Zmlyc3RfY2h1bms=\n' | base64 -d > /remote/path\n"
+                    sent.should include "echo -n 'c2Vjb25kX2NodW5r\n' | base64 -d >> /remote/path\n"
+                  end
+
+                  it 'should copy empty files' do
+                    @sf.stub!( :is_a? ).with( Remote::Session::Send ).and_return( true )
+                    @sf.stub!( :open? => false )
+                    @sf.stub!( :remote_path ).and_return( '/remote/path' )
+                    @sf.stub!( :eof? => true )
+
+                    sent = []
+                    @ch.stub!( :send_data ) { | d | sent << d }
+
+
+                    @rs.sudo( @sf )
+
+                    sent.should include "echo -n '' | base64 -d > /remote/path\n"
+                  end
+
                 end
 
-                sent = []
-                @ch.stub!( :send_data ) { | d | sent << d }
+                context 'with user-supplied prompt' do
+                  it 'should send the supplied data' do
+                    @@data[ 2 ] = [ 'remote-session-prompt#', 'Supply user password:', 'remote-session-prompt#' ]
+                    @ch.should_receive( :send_data ).with( "this data\n" )
+                    @rs.prompts[ 'user password:' ] = 'this data' 
 
-                @rs.sudo( @sf )
+                    @rs.sudo( 'pwd' )
+                  end
 
-                sent.should == [
-                  "echo -n 'Zmlyc3RfY2h1bms=\n' | base64 -d > /remote/path\n",
-                  "echo -n 'c2Vjb25kX2NodW5r\n' | base64 -d >> /remote/path\n",
-                  "exit\n"
-                ]
-              end
+                  it 'should echo the prompt' do
+                    @@data[ 2 ] = [ 'remote-session-prompt#', 'Supply user password:', 'remote-session-prompt#' ]
+                    @rs.prompts[ 'user password:' ] = 'this data' 
 
-              it 'should copy empty files' do
-                @ch.stub!( :on_data ) do |&block|
-                  block.call( @ch, 'root_prompt#' )
-                  block.call( @ch, 'root_prompt#' )
+                    output = expect_output do
+                      @rs.sudo( 'pwd' )
+                    end
+ 
+                    output[ 0 ].should include 'Supply user password:'
+                  end
+
                 end
 
-                @sf.stub!( :is_a? ).with( Remote::Session::Send ).and_return( true )
-                @sf.stub!( :open? => false )
-                @sf.stub!( :remote_path ).and_return( '/remote/path' )
-                @sf.stub!( :eof? => true )
+                it 'should send error data to stdout' do
+                  @ch.stub!( :on_data )
 
-                sent = []
-                @ch.stub!( :send_data ) { | d | sent << d }
+                  @ch.stub!( :on_extended_data ) do |&block|
+                  block.call @ch, 'foo', 'It failed' 
+                  end
 
-
-                @rs.sudo( @sf )
-
-                sent.should == [
-                  "echo -n '' | base64 -d > /remote/path\n",
-                  "exit\n"
-                ]
-              end
-              
-            end
-
-            context 'with password prompt' do
-              before :each do
-                $stdout.stub( :write )
-                @ch.stub!( :on_data ) do |&block|
-                  block.call( @ch, 'sudo_prompt' )
-                  block.call( @ch, 'root#' )
+                  expect_output do
+                    @rs.sudo( 'pwd' )
+                  end.should == [ [], [ "It failed\n" ] ]
                 end
+
               end
 
-              it 'should supply the sudo password, when prompted' do
-                @ch.should_receive( :send_data ).with( "secret\n" )
-
-                @rs.sudo( 'pwd' )
-              end
-
-              it 'should not echo the standard prompt' do
-                expect_output do
-                  @rs.sudo( 'pwd' )
-                end.should == [ [ 'root#' ], [] ]
-              end
-            end
-
-            context 'with user-supplied prompt' do
-              before :each do
-                $stdout.stub( :write )
-                @ch.stub!( :on_data ) do |&block|
-                  block.call( @ch, 'Here is my prompt:' )
-                  block.call( @ch, 'root#' )
-                end
-              end
-
-              it 'should send the supplied data' do
-                @ch.should_receive( :send_data ).with( "this data\n" )
-                @rs.prompts[ 'my prompt' ] = 'this data' 
-
-                @rs.sudo( 'pwd' )
-              end
-
-              it 'should not echo the prompt' do
-                @rs.prompts[ 'my prompt' ] = 'this data' 
-
-                expect_output do
-                  @rs.sudo( 'pwd' )
-                end.should == [ [ 'root#' ], [] ]
-              end
-
-            end
-
-            it 'should send error data to stdout' do
-              @ch.stub!( :on_data )
-
-              @ch.stub!( :on_extended_data ) do |&block|
-                block.call @ch, 'foo', 'It failed' 
-              end
-
-              expect_output do
-                @rs.sudo( 'pwd' )
-              end.should == [ [], [ "It failed", "\n" ] ]
             end
 
           end

@@ -103,19 +103,18 @@ module Remote
     end
 
     def handle_sudo_password_prompt( ch, data )
-      $stdout.write( data )
+      $stdout.write data
 
       if data =~ Regexp.new( SUDO_PASSWORD_PROMPT )
-        ch.on_data &method( :set_command_prompt )
         ch.send_data "#{ @sudo_password }\n"
-        puts "Sent sudo password"
+        ch.on_data &method( :set_command_prompt )
       end
     end
 
     # Set the root command prompt to something we can
     # recognise, and wait until that prompt comes back
     def set_command_prompt( ch, data )
-      $stdout.write( data )
+      $stdout.write data
 
       if data =~ ROOT_COMMAND_PROMPT_MATCH
         # Got it, now we can switch so sending commands
@@ -125,14 +124,13 @@ module Remote
       elsif ! ch[ :awaiting_prompt ]
         # this is the first time through...
         ch[ :awaiting_prompt ] = true
-        ch.send_data "export PS1='#{ ROOT_COMMAND_PROMPT }'\n"
-      else
-        # Waiting for new root prompt
+        ch.send_data "export PS1='#{ ROOT_COMMAND_PROMPT }'"
+      # else: Waiting for new root prompt
       end
     end
 
     def on_data( ch, data )
-      $stdout.write( data )
+      $stdout.write data
 
       @prompts.each_pair do | prompt, send |
         if data =~ Regexp.new( prompt )
