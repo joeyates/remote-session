@@ -27,7 +27,7 @@ module SpecOutputCapture
     $stdout.rspec_reset
     $stderr.rspec_reset
 
-    [ stdout, stderr ]
+    { :stdout => stdout, :stderr => stderr }
   end
 
 end
@@ -268,7 +268,7 @@ describe Remote::Session do
                 @rs.sudo( 'pwd' )
               end
  
-              output[ 0 ][ 0 ].should == 'remote-session-sudo-prompt'
+              output[ :stdout ][ 0 ].should == 'remote-session-sudo-prompt'
             end
 
             context 'after sudo prompt' do
@@ -286,8 +286,8 @@ describe Remote::Session do
                   @rs.sudo( 'pwd' )
                 end
 
-                output[ 0 ].should include 'stuff1'
-                output[ 0 ].should include 'stuff2'
+                output[ :stdout ].should include 'stuff1'
+                output[ :stdout ].should include 'stuff2'
               end
 
               context 'with special command prompt' do
@@ -313,7 +313,7 @@ describe Remote::Session do
                     @rs.sudo( 'pwd' )
                   end
 
-                  output[ 0 ].should include 'some_data'
+                  output[ :stdout ].should include 'some_data'
                 end
 
                 context 'sending files' do
@@ -398,7 +398,7 @@ describe Remote::Session do
                       @rs.sudo( 'pwd' )
                     end
  
-                    output[ 0 ].should include 'Supply user password:'
+                    output[ :stdout ].should include 'Supply user password:'
                   end
 
                 end
@@ -407,12 +407,14 @@ describe Remote::Session do
                   @ch.stub!( :on_data )
 
                   @ch.stub!( :on_extended_data ) do |&block|
-                  block.call @ch, 'foo', 'It failed' 
+                    block.call @ch, 'foo', 'It failed'
                   end
 
-                  expect_output do
+                  output = expect_output do
                     @rs.sudo( 'pwd' )
-                  end.should == [ [], [ "It failed\n" ] ]
+                  end
+
+                  output[ :stderr ].should include "It failed\n"
                 end
 
               end
