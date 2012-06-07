@@ -247,13 +247,13 @@ describe Remote::Session do
               @ch.stub!( :on_extended_data => nil )
               $stdout.stub( :write => nil )
 
-              # For each call to Channel.on_data, @@data contains the strings
+              # For each call to Channel.on_data, @data contains the strings
               # to send back to the block
-              @@data = [ [ 'remote-session-sudo-prompt' ],               # channel_exec call
+              @data = [ [ 'remote-session-sudo-prompt' ],               # channel_exec call
                          [ 'any prompt#', 'remote-session-prompt#' ],    # handle_sudo_password_prompt call
                          [ 'remote-session-prompt#', 'remote-session-prompt#', 'remote-session-prompt#' ] ]
               @ch.stub!( :on_data ) do |&block|
-                @@data.shift.each { |response| block.call @ch, response }
+                @data.shift.each { |response| block.call @ch, response }
               end
             end
 
@@ -280,7 +280,7 @@ describe Remote::Session do
               end
 
               it 'should echo until the prompt is set' do
-                @@data[ 1 ] = [ 'prompt#', 'stuff1', 'stuff2', 'remote-session-prompt#' ]
+                @data[ 1 ] = [ 'prompt#', 'stuff1', 'stuff2', 'remote-session-prompt#' ]
 
                 output = expect_output do
                   @rs.sudo( 'pwd' )
@@ -308,7 +308,7 @@ describe Remote::Session do
                 end
 
                 it 'should output returning data' do
-                  @@data[ 2 ] = [ 'remote-session-prompt#', 'some_data', 'remote-session-prompt#' ]
+                  @data[ 2 ] = [ 'remote-session-prompt#', 'some_data', 'remote-session-prompt#' ]
                   output = expect_output do
                     @rs.sudo( 'pwd' )
                   end
@@ -383,7 +383,7 @@ describe Remote::Session do
 
                 context 'with user-supplied prompt' do
                   it 'should send the supplied data' do
-                    @@data[ 2 ] = [ 'remote-session-prompt#', 'Supply user password:', 'remote-session-prompt#' ]
+                    @data[ 2 ] = [ 'remote-session-prompt#', 'Supply user password:', 'remote-session-prompt#' ]
                     @ch.should_receive( :send_data ).with( "this data\n" )
                     @rs.prompts[ 'user password:' ] = 'this data' 
 
@@ -391,7 +391,7 @@ describe Remote::Session do
                   end
 
                   it 'should echo the prompt' do
-                    @@data[ 2 ] = [ 'remote-session-prompt#', 'Supply user password:', 'remote-session-prompt#' ]
+                    @data[ 2 ] = [ 'remote-session-prompt#', 'Supply user password:', 'remote-session-prompt#' ]
                     @rs.prompts[ 'user password:' ] = 'this data' 
 
                     output = expect_output do
