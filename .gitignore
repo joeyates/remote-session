@@ -1,6 +1,9 @@
 *.gem
+.bundle
+.rbenv-version
 .rvmrc
 Gemfile.lock
 coverage
 pkg
+vendor
 
